@@ -103,6 +103,20 @@ impl fmt::Debug for SBError {
     }
 }
 
+impl fmt::Display for SBError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.is_valid() {
+            write!(f, "Invalid SBError")
+        } else if !self.is_failure() {
+            write!(f, "SBError representing success")
+        } else {
+            write!(f, "SBError: {}", self.error_string())
+        }
+    }
+}
+
+impl Error for SBError {}
+
 impl Drop for SBError {
     fn drop(&mut self) {
         unsafe { sys::DisposeSBError(self.raw) };
