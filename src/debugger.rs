@@ -314,7 +314,40 @@ impl SBDebugger {
         unsafe { sys::SBDebuggerSetSelectedPlatform(self.raw, platform.raw) };
     }
 
+    /// Select a platform by name that is in the list of available platforms
+    ///
+    /// ```
+    /// # use lldb::{SBDebugger, SBError};
+    /// # fn _wrapper(debugger: &mut SBDebugger) -> Result<(), SBError> {
+    /// debugger.select_available_platform("remote-gdb-server")?;
+    /// # }
+    /// ```
+    pub fn select_available_platform(&self, name: &str) -> Result<SBPlatform, SBError> {
+        self.add_platform(name)?;
+        let platform = self
+            .get_platform(name)
+            .expect("Either platform exists or add_platform failed");
+        self.set_selected_platform(&platform);
+        Ok(self.selected_platform())
+    }
+
+    /// Add a platform to the list of platforms known to this debugger instance.
+    ///
+    /// The platform must be available (see [`Self::available_platforms`]).
+    ///
+    /// Note: This maps to the C++ API SBDebugger::SetCurrentPlatform
+    pub fn add_platform(&self, name: impl Into<String>) -> Result<(), SBError> {
+        let name = CString::new(name.into()).expect("name contains null");
+        let name = Box::leak(Box::new(name));
+        let result = unsafe { sys::SBDebuggerSetCurrentPlatform(self.raw, name.as_ptr()) };
+        SBError::wrap(result).into_result()
+    }
+
     /// Get an iterator over the [platforms] known to this debugger instance.
+    ///
+    /// This is the list of platforms that can be selected. To add a platform to
+    /// this list call set_current_platform with the name of an available
+    /// platform (see [`Self::available_platforms`]).
     ///
     /// [platforms]: struct.SBPlatform.html
     pub fn platforms(&self) -> SBDebuggerPlatformIter {
@@ -324,12 +357,32 @@ impl SBDebugger {
         }
     }
 
+    /// Get a platform known to this debugger instance.
+    ///
+    /// This checks the list of platforms that can be selected, which doesn't
+    /// necessarily include all available platforms. To ensure an available
+    /// platform is known see [`Self::add_platform`].
+    pub fn get_platform(&self, name: &str) -> Option<SBPlatform> {
+        self.platforms().find(|p| p.name() == name)
+    }
+
     /// Get an iterator over the available platforms known to this debugger instance.
     pub fn available_platforms(&self) -> SBDebuggerAvailablePlatformIter {
         SBDebuggerAvailablePlatformIter {
             debugger: self,
             idx: 0,
         }
+    }
+
+    pub fn is_platform_available(&self, name: &str) -> bool {
+        self.available_platforms().any(|platform| {
+            if let Some(avail_name) = platform.value_for_key("name") {
+                if let Some(avail_name) = avail_name.string_value() {
+                    return avail_name == name;
+                }
+            }
+            false
+        })
     }
 }
 
@@ -478,10 +531,37 @@ graphql_object!(SBDebugger: SBDebugger | &self | {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Once;
+
     use super::SBDebugger;
+
+    static INITIALIZED: Once = Once::new();
+
+    fn fixture() -> SBDebugger {
+        INITIALIZED.call_once(|| {
+            SBDebugger::initialize();
+        });
+        SBDebugger::create(false)
+    }
 
     #[test]
     fn it_works() {
         assert!(!SBDebugger::version().is_empty());
+    }
+
+    #[test]
+    fn selecting_non_available_platform_returns_err() {
+        let debugger = fixture();
+        assert!(debugger
+            .select_available_platform("nonexistent-platform")
+            .is_err())
+    }
+
+    #[test]
+    fn selecting_available_platform_returns_ok() {
+        let debugger = fixture();
+        assert!(debugger
+            .select_available_platform("remote-gdb-server")
+            .is_ok())
     }
 }
