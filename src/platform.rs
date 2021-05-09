@@ -7,7 +7,8 @@
 use super::error::SBError;
 use super::launchinfo::SBLaunchInfo;
 use super::lldb_pid_t;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
+use std::fmt::Write;
 use sys;
 
 /// A platform that can represent the current host or a
@@ -51,6 +52,36 @@ impl SBPlatform {
             Some(SBPlatform { raw })
         } else {
             None
+        }
+    }
+
+    /// Connect to a remote.
+    ///
+    /// Use [`Self::connect_remote_with_options`] if you need to provide a path
+    /// or don't want to provide a port.
+    pub fn connect_remote(
+        &mut self,
+        scheme: RemoteScheme,
+        host: &str,
+        port: u16,
+    ) -> Result<(), SBError> {
+        let options = RemoteConnectOptions::new(scheme, host, Some(port), None);
+        self.connect_remote_with_options(options)
+    }
+
+    /// Connect to a remote.
+    ///
+    /// Use [`Self::connect_remote`] if you only need to provide a url scheme,
+    /// host, and port.
+    pub fn connect_remote_with_options(
+        &mut self,
+        options: RemoteConnectOptions,
+    ) -> Result<(), SBError> {
+        let result = SBError::wrap(unsafe { sys::SBPlatformConnectRemote(self.raw, options.0) });
+        if result.is_success() {
+            Ok(())
+        } else {
+            Err(result)
         }
     }
 
@@ -184,6 +215,90 @@ impl Drop for SBPlatform {
 
 unsafe impl Send for SBPlatform {}
 unsafe impl Sync for SBPlatform {}
+
+pub struct RemoteConnectOptions(sys::SBPlatformConnectOptionsRef);
+
+impl RemoteConnectOptions {
+    pub fn new(scheme: RemoteScheme, host: &str, port: Option<u16>, path: Option<&str>) -> Self {
+        let url = Self::serialize_url(scheme, host, port, path);
+        // NOTE: Based on source code we are transferring ownership of url
+        // to the caller
+        let url = Box::leak(Box::new(url));
+        let raw = unsafe { sys::CreateSBPlatformConnectOptions(url.as_ptr()) };
+        Self(raw)
+    }
+
+    fn serialize_url(
+        scheme: RemoteScheme,
+        host: &str,
+        port: Option<u16>,
+        path: Option<&str>,
+    ) -> CString {
+        // For details of URL format supported see <https://github.com/llvm/llvm-project/blob/d480f968ad8b56d3ee4a6b6df5532d485b0ad01e/lldb/source/Utility/UriParser.cpp>
+        let mut url = format!("{}://{}", scheme.as_str(), host);
+        if let Some(port) = port {
+            write!(&mut url, ":{}", port).unwrap();
+        }
+        if let Some(path) = path {
+            write!(&mut url, "/{}", path).unwrap();
+        }
+
+        CString::new(url).expect("URL doesn't contain nul")
+    }
+
+    pub fn wrap(raw: sys::SBPlatformConnectOptionsRef) -> Self {
+        Self(raw)
+    }
+
+    // TODO: Setters and getters for URL, rsync, local cache dir
+}
+
+impl Clone for RemoteConnectOptions {
+    fn clone(&self) -> Self {
+        let raw = unsafe { sys::CloneSBPlatformConnectOptions(self.0) };
+        Self(raw)
+    }
+}
+
+impl Drop for RemoteConnectOptions {
+    fn drop(&mut self) {
+        unsafe { sys::DisposeSBPlatformConnectOptions(self.0) };
+    }
+}
+
+unsafe impl Send for RemoteConnectOptions {}
+unsafe impl Sync for RemoteConnectOptions {}
+
+pub enum RemoteScheme {
+    // See <https://github.com/llvm/llvm-project/blob/d480f968ad8b56d3ee4a6b6df5532d485b0ad01e/lldb/source/Host/posix/ConnectionFileDescriptorPosix.cpp#L53>
+    Listen,
+    Accept,
+    UnixAccept,
+    Connect,
+    TcpConnect,
+    Udp,
+    UnixConnect,
+    UnixAbstractConnect,
+    Fd,
+    File,
+}
+
+impl RemoteScheme {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Listen => "listen",
+            Self::Accept => "accept",
+            Self::UnixAccept => "unix-accept",
+            Self::Connect => "connect",
+            Self::TcpConnect => "tcp-connect",
+            Self::Udp => "udp",
+            Self::UnixConnect => "unix-connect",
+            Self::UnixAbstractConnect => "unix-abstract-connect",
+            Self::Fd => "fd",
+            Self::File => "file",
+        }
+    }
+}
 
 #[cfg(feature = "graphql")]
 graphql_object!(SBPlatform: super::debugger::SBDebugger | &self | {

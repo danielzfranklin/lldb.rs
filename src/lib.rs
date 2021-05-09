@@ -207,7 +207,7 @@ pub use self::lineentry::SBLineEntry;
 pub use self::listener::SBListener;
 pub use self::module::{SBModule, SBModuleSectionIter};
 pub use self::modulespec::SBModuleSpec;
-pub use self::platform::SBPlatform;
+pub use self::platform::{RemoteConnectOptions, RemoteScheme, SBPlatform};
 pub use self::process::{
     SBProcess, SBProcessEvent, SBProcessEventRestartedReasonIter, SBProcessQueueIter,
     SBProcessThreadIter,
