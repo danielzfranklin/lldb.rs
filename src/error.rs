@@ -6,8 +6,8 @@
 
 use super::stream::SBStream;
 use super::ErrorType;
-use std::ffi::CStr;
 use std::fmt;
+use std::{error::Error, ffi::CStr};
 use sys;
 
 /// A container for holding any error code.
@@ -70,6 +70,14 @@ impl SBError {
     /// What type of error is this?
     pub fn error_type(&self) -> ErrorType {
         unsafe { sys::SBErrorGetType(self.raw) }
+    }
+
+    pub fn into_result(self) -> Result<(), SBError> {
+        if self.is_success() {
+            Ok(())
+        } else {
+            Err(self)
+        }
     }
 }
 
