@@ -166,6 +166,7 @@ mod process;
 mod processinfo;
 mod queue;
 mod queueitem;
+mod remote_url;
 mod section;
 mod stream;
 mod stringlist;
@@ -207,7 +208,7 @@ pub use self::lineentry::SBLineEntry;
 pub use self::listener::SBListener;
 pub use self::module::{SBModule, SBModuleSectionIter};
 pub use self::modulespec::SBModuleSpec;
-pub use self::platform::{RemoteConnectOptions, RemoteScheme, SBPlatform};
+pub use self::platform::{RemoteConnectOptions, SBPlatform};
 pub use self::process::{
     SBProcess, SBProcessEvent, SBProcessEventRestartedReasonIter, SBProcessQueueIter,
     SBProcessThreadIter,
@@ -215,6 +216,7 @@ pub use self::process::{
 pub use self::processinfo::SBProcessInfo;
 pub use self::queue::{SBQueue, SBQueueQueueItemIter, SBQueueThreadIter};
 pub use self::queueitem::SBQueueItem;
+pub use self::remote_url::{RemoteUrl, RemoteUrlScheme};
 pub use self::section::{SBSection, SBSectionSubSectionIter};
 pub use self::stream::SBStream;
 pub use self::stringlist::{SBStringList, SBStringListIter};

@@ -4,6 +4,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use crate::{RemoteUrl, SBListener};
+
 use super::attachinfo::SBAttachInfo;
 use super::breakpoint::SBBreakpoint;
 use super::broadcaster::SBBroadcaster;
@@ -22,8 +24,11 @@ use super::symbolcontextlist::SBSymbolContextList;
 use super::value::SBValue;
 use super::watchpoint::SBWatchpoint;
 use super::{lldb_addr_t, DescriptionLevel, MatchType, SymbolType};
-use std::ffi::{CStr, CString};
-use std::fmt;
+use std::{
+    ffi::{CStr, CString},
+    ptr,
+};
+use std::{fmt, mem};
 use sys;
 
 /// The target program running under the debugger.
@@ -150,6 +155,41 @@ impl SBTarget {
             Ok(process)
         } else {
             Err(error)
+        }
+    }
+
+    /// Connect to a remote debug server
+    pub fn connect_remote(
+        &self,
+        url: &RemoteUrl,
+        plugin_name: Option<String>,
+    ) -> Result<SBProcess, SBError> {
+        let plugin_name = plugin_name
+            .map(|name| {
+                let name = CString::new(name).expect("plugin_name doesn't contain null");
+                Box::leak(Box::new(name)).as_ptr()
+            })
+            .unwrap_or(ptr::null());
+
+        let url = Box::leak(Box::new(url.serialize()));
+
+        let error_out = unsafe { sys::CreateSBError() };
+        let raw = unsafe {
+            sys::SBTargetConnectRemote(
+                self.raw,
+                sys::CreateSBListener(), // since it's invalid, lldb uses the default (the debugger)
+                url.as_ptr(),
+                plugin_name,
+                error_out,
+            )
+        };
+
+        if let Some(err) = ptr::NonNull::new(error_out) {
+            Err(SBError::wrap(err.as_ptr()))
+        } else {
+            let proc = SBProcess::maybe_wrap(raw)
+                .expect("If we don't get an error we get a valid process");
+            Ok(proc)
         }
     }
 
