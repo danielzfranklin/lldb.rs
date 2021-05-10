@@ -261,6 +261,26 @@ impl SBTarget {
         SBModule::maybe_wrap(unsafe { sys::SBTargetFindModule(self.raw, file_spec.raw) })
     }
 
+    /// Create a breakpoint given a regex (and optionally a module name).
+    pub fn create_breakpoint_by_regex(
+        &self,
+        regex: impl Into<String>,
+        module_name: Option<String>,
+    ) -> SBBreakpoint {
+        let regex = CString::new(regex.into()).expect("regex doesn't contain null");
+        let regex = Box::leak(Box::new(regex)).as_ptr();
+
+        let module_name = module_name
+            .map(|module| {
+                let module = CString::new(module).expect("module name doesn't contain null");
+                Box::leak(Box::new(module)).as_ptr()
+            })
+            .unwrap_or(ptr::null());
+
+        let raw = unsafe { sys::SBTargetBreakpointCreateByRegex(self.raw, regex, module_name) };
+        SBBreakpoint::maybe_wrap(raw).expect("Failed to create breakpoint")
+    }
+
     #[allow(missing_docs)]
     pub fn delete_breakpoint(&self, break_id: i32) {
         unsafe { sys::SBTargetBreakpointDelete(self.raw, break_id) };
