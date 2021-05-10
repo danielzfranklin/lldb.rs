@@ -28,7 +28,7 @@ impl RemoteUrl {
         self
     }
 
-    pub(crate) fn serialize(&self) -> CString {
+    pub fn serialize(&self) -> CString {
         // For details of URL format supported see <https://github.com/llvm/llvm-project/blob/d480f968ad8b56d3ee4a6b6df5532d485b0ad01e/lldb/source/Utility/UriParser.cpp>
         let mut url = format!("{}://{}", self.scheme.as_str(), self.host);
         if let Some(port) = self.port {
